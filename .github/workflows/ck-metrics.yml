@@ -28,7 +28,7 @@ jobs:
 
       - name: Run CK
         run: |
-          CP=$(cat cp.txt):~/.m2/repository/com/github/mauricioaniche/ck/0.7.0/ck-0.7.0.jar
+          CP=$(cat cp.txt)
           java -cp "$CP" com.github.mauricioaniche.ck.CK src/main/java false 0 false ck-output
 
       - name: Upload CSV
