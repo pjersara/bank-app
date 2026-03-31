@@ -1,29 +1,46 @@
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AccountServiceTest {
 
-    @Test
-    void testDeposit() {
-        AccountRepository repo = new AccountRepository();
-        AccountService service = new AccountService(repo);
+    private AccountRepository repo;
+    private AccountService service;
 
-        repo.save(new Account("A1", 100));
-
-        service.deposit("A1", 50);
-
-        assertEquals(150, repo.findById("A1").balance);
+    @BeforeEach
+    void setup() {
+        repo = new AccountRepository();
+        repo.save(new Account("A1", 1000));
+        repo.save(new Account("A2", 500));
+        service = new AccountService(repo);
     }
 
     @Test
-    void testWithdraw() {
-        AccountRepository repo = new AccountRepository();
-        AccountService service = new AccountService(repo);
+    void testDepositSuccess() {
+        service.deposit("A1", 200);
+        assertEquals(1200, repo.findById("A1").balance);
+    }
 
-        repo.save(new Account("A1", 200));
+    @Test
+    void testWithdrawSuccess() {
+        service.withdraw("A1", 300);
+        assertEquals(700, repo.findById("A1").balance);
+    }
 
-        service.withdraw("A1", 100);
+    @Test
+    void testWithdrawInsufficientFunds() {
+        assertThrows(RuntimeException.class,
+                () -> service.withdraw("A2", 1000));
+    }
 
-        assertEquals(100, repo.findById("A1").balance);
+    @Test
+    void testAccountNotFoundDeposit() {
+        assertThrows(IllegalArgumentException.class,
+                () -> service.deposit("X1", 100));
+    }
+
+    @Test
+    void testAccountNotFoundWithdraw() {
+        assertThrows(IllegalArgumentException.class,
+                () -> service.withdraw("X1", 100));
     }
 }
