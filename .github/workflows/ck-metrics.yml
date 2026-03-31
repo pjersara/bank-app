@@ -17,12 +17,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Download CK
-        run: mvn dependency:get -Dartifact=com.github.mauricioaniche:ck:0.7.0
+      - name: Download CK standalone jar
+        run: |
+          curl -L -o ck.jar https://github.com/mauricioaniche/ck/releases/download/ck-0.7.0/ck-0.7.0-jar-with-dependencies.jar
+
+      - name: Verify jar
+        run: ls -lh ck.jar
 
       - name: Run CK
         run: |
-          java -jar ~/.m2/repository/com/github/mauricioaniche/ck/0.7.0/ck-0.7.0-jar-with-dependencies.jar src/main/java false 0 false ck-output
+          java -jar ck.jar src/main/java false 0 false ck-output
 
       - name: Upload CSV
         uses: actions/upload-artifact@v4
