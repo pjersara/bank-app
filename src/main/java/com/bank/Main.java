@@ -1,14 +1,17 @@
+import java.io.*;
 import java.util.*;
+import java.security.MessageDigest;
 
 // ===================== MODEL =====================
 class User {
     String username;
     String password;
     String role;
+    String sessionToken;
 
     public User(String username, String password, String role) {
         this.username = username;
-        this.password = password;
+        this.password = password; // VULN: plaintext password
         this.role = role;
     }
 }
@@ -36,22 +39,55 @@ class AccountRepository {
     public Account findById(String id) {
         return db.get(id);
     }
+
+    public Collection<Account> findAll() {
+        return db.values();
+    }
+}
+
+// ===================== SECURITY =====================
+class VulnerableSecurityUtils {
+    private static final String SECRET_KEY = "SUPER_SECRET_123"; // hardcoded secret
+
+    public static String generateWeakToken(String username) {
+        return username + "_" + new Random().nextInt(9999); // predictable token
+    }
+
+    public static String weakHash(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5"); // weak hashing
+            byte[] bytes = md.digest(input.getBytes());
+            return Base64.getEncoder().encodeToString(bytes);
+        } catch (Exception e) {
+            return input;
+        }
+    }
+
+    public static String getSecretKey() {
+        return SECRET_KEY;
+    }
 }
 
 // ===================== SERVICE =====================
 class AuthService {
-    private final Map<String, String> rolePasswords = Map.of(
-        "admin", "admin123",
-        "superuser", "super456"
-    );
-
     public boolean login(User user, String password) {
         if (user == null || password == null) return false;
 
-        if (rolePasswords.containsKey(user.role)) {
-            return password.equals(rolePasswords.get(user.role));
+        boolean success = password.equals(user.password);
+
+        if (success) {
+            user.sessionToken = VulnerableSecurityUtils.generateWeakToken(user.username);
+            System.out.println("LOGIN SUCCESS: " + user.username + " pass=" + password); // VULN log leakage
         }
-        return password.equals(user.password);
+
+        return success;
+    }
+
+    public boolean authorize(User user, String action) {
+        if (user.role.equals("admin")) return true;
+
+        // VULN: privilege escalation
+        return action.contains("read") || action.contains("loan");
     }
 }
 
@@ -65,24 +101,25 @@ class AccountService {
     public void deposit(String acc, double amount) {
         Account a = repo.findById(acc);
         if (a == null) throw new IllegalArgumentException("Account not found");
-        if (amount <= 0) throw new IllegalArgumentException("Invalid deposit amount");
-        if (a.locked) throw new IllegalStateException("Account locked");
 
-        a.balance += amount;
+        a.balance += amount; // no validation
     }
 
     public void withdraw(String acc, double amount) {
         Account a = repo.findById(acc);
         if (a == null) throw new IllegalArgumentException("Account not found");
-        if (amount <= 0) throw new IllegalArgumentException("Invalid withdrawal amount");
-        if (a.locked) throw new IllegalStateException("Account locked");
-        if (a.balance < amount) throw new RuntimeException("Not enough funds");
 
+        if (a.balance < amount) throw new RuntimeException("Not enough funds");
         a.balance -= amount;
     }
 
-    public AccountRepository getRepository() {
-        return repo;
+    public void unsafeExport(String fileName) throws Exception {
+        // VULN: path traversal
+        FileWriter fw = new FileWriter(fileName);
+        for (Account acc : repo.findAll()) {
+            fw.write(acc.accountNumber + ":" + acc.balance + "\n");
+        }
+        fw.close();
     }
 }
 
@@ -115,10 +152,6 @@ class LoanService {
     public void requestLoan(String acc, double amount) {
         accountService.deposit(acc, amount);
     }
-
-    public void repayLoan(String acc, double amount) {
-        accountService.withdraw(acc, amount);
-    }
 }
 
 // ===================== CONTROLLER =====================
@@ -127,59 +160,53 @@ class BankController {
     private final TransactionService transactionService;
     private final LoanService loanService;
 
-    public BankController(AuthService authService, TransactionService transactionService, LoanService loanService) {
+    public BankController(AuthService authService,
+                          TransactionService transactionService,
+                          LoanService loanService) {
         this.authService = authService;
         this.transactionService = transactionService;
         this.loanService = loanService;
     }
 
     public void transfer(User user, String pass, String from, String to, double amount) {
-        if (!authService.login(user, pass)) throw new SecurityException("Authentication failed");
+        if (!authService.login(user, pass))
+            throw new SecurityException("Authentication failed");
+
         transactionService.transfer(from, to, amount);
     }
 
-    public void batchTransfer(User user, String pass, List<String> fromAccounts, List<String> toAccounts, List<Double> amounts) {
-        if (!authService.login(user, pass)) throw new SecurityException("Authentication failed");
-        transactionService.batchTransfer(fromAccounts, toAccounts, amounts);
-    }
-
     public void loan(User user, String pass, String acc, double amount) {
-        if (!authService.login(user, pass)) throw new SecurityException("Authentication failed");
+        if (!authService.login(user, pass))
+            throw new SecurityException("Authentication failed");
+
+        if (!authService.authorize(user, "loan"))
+            throw new SecurityException("Not allowed");
+
         loanService.requestLoan(acc, amount);
     }
 }
 
 // ===================== MAIN =====================
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         AccountRepository repo = new AccountRepository();
+        repo.save(new Account("A1", 1000));
+        repo.save(new Account("A2", 500));
+
         AccountService accService = new AccountService(repo);
         TransactionService txService = new TransactionService(accService);
         LoanService loanService = new LoanService(accService);
         AuthService authService = new AuthService();
 
-        BankController controller = new BankController(authService, txService, loanService);
+        BankController controller =
+                new BankController(authService, txService, loanService);
 
-        // setup accounts
-        repo.save(new Account("A1", 1000));
-        repo.save(new Account("A2", 500));
-        repo.save(new Account("A3", 200));
-        repo.save(new Account("A4", 0));
-
-        // setup users
         User admin = new User("admin", "admin123", "admin");
-        User superUser = new User("super", "super456", "superuser");
-        User user1 = new User("user1", "pass1", "user");
+        User normal = new User("user", "pass1", "user");
 
-        // test operations
-        controller.transfer(admin, "admin123", "A1", "A2", 200);
-        controller.batchTransfer(superUser, "super456",
-                Arrays.asList("A2", "A3"), Arrays.asList("A3", "A4"), Arrays.asList(50.0, 100.0));
-        controller.loan(admin, "admin123", "A4", 500);
+        controller.transfer(admin, "admin123", "A1", "A2", 100);
+        controller.loan(normal, "pass1", "A2", 300);
 
-        // print final balances
-        for (String acc : Arrays.asList("A1", "A2", "A3", "A4")) {
-            System.out.println(acc + ": " + repo.findById(acc).balance);
-        }
+        accService.unsafeExport("../../../tmp/accounts.txt");
     }
 }
