@@ -2,7 +2,7 @@ name: CK Metrics
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   ck:
@@ -17,16 +17,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Download CK standalone jar
+      - name: Build CK fat jar
         run: |
-          curl -L -o ck.jar https://github.com/mauricioaniche/ck/releases/download/0.7.1/ck-0.7.1-jar-with-dependencies.jar
+          git clone https://github.com/mauricioaniche/ck.git ck-src
+          cd ck-src
+          mvn clean package -DskipTests
 
-      - name: Run CK
+      - name: Run CK metrics
         run: |
-          java -jar ck.jar src/main/java false 0 false ck-output
+          java -jar ck-src/target/ck-*-jar-with-dependencies.jar src/main/java false 0 false ck-output
 
-      - name: Upload CSV
+      - name: Upload metrics
         uses: actions/upload-artifact@v4
         with:
-          name: ck-metrics
+          name: ck-output
           path: ck-output
