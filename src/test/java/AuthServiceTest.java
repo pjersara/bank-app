@@ -3,19 +3,41 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuthServiceTest {
 
-    @Test
-    void testAdminLoginSuccess() {
-        AuthService auth = new AuthService();
-        User admin = new User("admin", "admin123", "admin");
+    private final AuthService authService = new AuthService();
 
-        assertTrue(auth.login(admin, "admin123"));
+    @Test
+    void testLoginSuccess() {
+        User user = new User("john", "pass123", "user");
+        assertTrue(authService.login(user, "pass123"));
+        assertNotNull(user.sessionToken);
     }
 
     @Test
-    void testUserLoginFail() {
-        AuthService auth = new AuthService();
-        User user = new User("user", "pass", "user");
+    void testLoginWrongPassword() {
+        User user = new User("john", "pass123", "user");
+        assertFalse(authService.login(user, "wrong"));
+    }
 
-        assertFalse(auth.login(user, "wrong"));
+    @Test
+    void testLoginNullUser() {
+        assertFalse(authService.login(null, "pass"));
+    }
+
+    @Test
+    void testLoginNullPassword() {
+        User user = new User("john", "pass123", "user");
+        assertFalse(authService.login(user, null));
+    }
+
+    @Test
+    void testAdminAuthorization() {
+        User admin = new User("admin", "123", "admin");
+        assertTrue(authService.authorize(admin, "delete"));
+    }
+
+    @Test
+    void testUserLoanAuthorization() {
+        User user = new User("user", "123", "user");
+        assertTrue(authService.authorize(user, "loan"));
     }
 }
