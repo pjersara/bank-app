@@ -25,6 +25,7 @@ jobs:
 
       - name: Run CK metrics
         run: |
+          mkdir -p ck-output
           java -jar ck-src/target/ck-*-jar-with-dependencies.jar src/main/java false 0 false ck-output
 
       - name: Upload metrics
