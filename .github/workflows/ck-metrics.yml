@@ -18,7 +18,7 @@ jobs:
           java-version: 17
 
       - name: Download CK
-        run: mvn dependency:get -Dartifact=com.github.mauricioaniche:ck:0.7.1
+        run: mvn dependency:get -Dartifact=com.github.mauricioaniche:ck:0.7.0
 
       - name: Run CK
         run: |
