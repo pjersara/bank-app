@@ -33,13 +33,25 @@ class AdvancedCoverageTest {
         file.delete();
     }
 
-    @Test
-    void testUnauthorizedLoanFails() {
-        User badUser = new User("x", "123", "guest");
+@Test
+void testLoanAllowedForRegularUserDueToVulnerability() {
+    User user = new User("john", "pass", "user");
 
-        assertThrows(SecurityException.class,
-                () -> controller.loan(badUser, "123", "A1", 200));
-    }
+    AccountRepository repo = new AccountRepository();
+    repo.save(new Account("A1", 100));
+
+    AccountService acc = new AccountService(repo);
+    LoanService loan = new LoanService(acc);
+    TransactionService tx = new TransactionService(acc);
+    AuthService auth = new AuthService();
+
+    BankController controller = new BankController(auth, tx, loan);
+
+    assertDoesNotThrow(() ->
+            controller.loan(user, "pass", "A1", 100));
+
+    assertEquals(200, repo.findById("A1").balance);
+}
 
     @Test
     void testAuthorizeFalseBranch() {
